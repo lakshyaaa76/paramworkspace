@@ -1,0 +1,41 @@
+export const DOMAINS = [
+  'AI/ML',
+  'Robotics',
+  'IoT',
+  'Web Development',
+  'Mobile Development',
+  'Electronics',
+  '3D Printing',
+  'Laser Cutting',
+  'Woodworking',
+  'Metalworking',
+  'Textile/Wearables',
+  'Game Development',
+  'AR/VR',
+  'Drone Technology',
+  'Sustainability',
+  'Art & Design',
+  'Other',
+] as const
+
+export type Domain = (typeof DOMAINS)[number]
+
+export const DOMAIN_ICONS: Record<string, string> = {
+  'AI/ML': '🤖',
+  Robotics: '🦾',
+  IoT: '📡',
+  'Web Development': '🌐',
+  'Mobile Development': '📱',
+  Electronics: '⚡',
+  '3D Printing': '🖨️',
+  'Laser Cutting': '✂️',
+  Woodworking: '🪵',
+  Metalworking: '⚙️',
+  'Textile/Wearables': '👕',
+  'Game Development': '🎮',
+  'AR/VR': '🥽',
+  'Drone Technology': '🛸',
+  Sustainability: '🌱',
+  'Art & Design': '🎨',
+  Other: '🔧',
+}
