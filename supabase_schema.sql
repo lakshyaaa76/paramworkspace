@@ -610,6 +610,13 @@ CREATE POLICY "Users can read all profiles"
   ON public.app_user FOR SELECT USING (true);
 CREATE POLICY "Users can update own profile"
   ON public.app_user FOR UPDATE USING (auth.uid() = id);
+CREATE POLICY "Admins can update user profiles"
+  ON public.app_user FOR UPDATE USING (
+    EXISTS (
+      SELECT 1 FROM public.app_user
+      WHERE id = auth.uid() AND role = 'admin'
+    )
+  );
 
 -- ── maker_profile ─────────────────────────────────────────
 CREATE POLICY "Anyone can read public maker profiles"

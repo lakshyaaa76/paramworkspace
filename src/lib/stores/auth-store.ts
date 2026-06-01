@@ -89,6 +89,12 @@ export const useAuthStore = create<AuthState>()(
             .eq('id', authUser.id)
             .single()
 
+          if (appUser && !appUser.is_active) {
+            await supabase.auth.signOut()
+            set({ user: null, isAuthenticated: false, isLoading: false })
+            return
+          }
+
           set({
             user: appUser ?? null,
             isAuthenticated: !!appUser,
@@ -123,6 +129,12 @@ export const useAuthStore = create<AuthState>()(
         if (profileError || !appUser) {
           set({ isLoading: false })
           return { success: false, error: 'Could not load your profile. Please contact support.' }
+        }
+
+        if (!appUser.is_active) {
+          await supabase.auth.signOut()
+          set({ isLoading: false })
+          return { success: false, error: 'This account has been deactivated. Please contact support.' }
         }
 
         set({ user: appUser, isAuthenticated: true, isLoading: false })
