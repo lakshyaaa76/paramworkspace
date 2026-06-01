@@ -35,6 +35,7 @@ export default function SingleProjectPage() {
   
   const [project, setProject] = useState<ProjectDetails | null>(null)
   const [loading, setLoading] = useState(true)
+  const [fetchError, setFetchError] = useState<string | null>(null)
 
   useEffect(() => {
     const fetchProject = async () => {
@@ -44,16 +45,30 @@ export default function SingleProjectPage() {
           *,
           app_user!project_owner_id_fkey(name),
           project_image(image_url, display_order),
-          project_file(file_name, file_type, file_url, file_size),
+          project_file(file_name, file_type, file_url, file_size_bytes),
           project_video(video_url, display_order, title),
-          project_milestone(title, description, is_completed),
-          entity_tag(tag(name))
+          project_milestone(title, description, completed_at)
         `)
         .eq('id', projectId)
         .single()
 
+      if (error) {
+        console.error('Project fetch error:', error.message, '| code:', error.code)
+        setFetchError(error.message)
+      }
+
       if (!error && data) {
-        setProject(data as ProjectDetails)
+        // Fetch polymorphic tags separately since PostgREST can't auto-join on generic target_id
+        const { data: tagData } = await supabase
+          .from('entity_tag')
+          .select('tag(name)')
+          .eq('target_type', 'project')
+          .eq('target_id', projectId)
+
+        setProject({
+          ...data,
+          entity_tag: tagData || []
+        } as unknown as ProjectDetails)
       }
       setLoading(false)
     }
@@ -76,7 +91,10 @@ export default function SingleProjectPage() {
       <div className="flex flex-col items-center justify-center py-40 text-center">
         <FolderKanban className="h-16 w-16 text-muted-foreground/30 mb-4" />
         <h1 className="text-2xl font-bold mb-2">Project not found</h1>
-        <p className="text-muted-foreground mb-6">This project may have been removed or is currently private.</p>
+        <p className="text-muted-foreground mb-2">This project may be private or still under review.</p>
+        {fetchError && (
+          <p className="text-xs text-red-400 font-mono bg-red-500/10 px-3 py-1.5 rounded mb-4">{fetchError}</p>
+        )}
         <Button asChild><Link href="/projects">Browse all projects</Link></Button>
       </div>
     )

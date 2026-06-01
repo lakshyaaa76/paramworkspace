@@ -157,7 +157,7 @@ export default function NewProjectPage() {
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Domain</Label>
-                <Select value={domain} onValueChange={setDomain}>
+                <Select value={domain} onValueChange={(v) => setDomain(v || '')}>
                   <SelectTrigger><SelectValue placeholder="Select domain" /></SelectTrigger>
                   <SelectContent>
                     {DOMAINS.map((d) => (<SelectItem key={d} value={d}>{d}</SelectItem>))}
@@ -166,7 +166,7 @@ export default function NewProjectPage() {
               </div>
               <div className="space-y-2">
                 <Label>Tier</Label>
-                <Select value={tier} onValueChange={setTier}>
+                <Select value={tier} onValueChange={(v) => setTier(v || '')}>
                   <SelectTrigger><SelectValue placeholder="Select tier" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="1">Beginner</SelectItem>
@@ -187,7 +187,7 @@ export default function NewProjectPage() {
             </div>
             <div className="space-y-2">
               <Label>Duration Estimate</Label>
-              <Select value={duration} onValueChange={setDuration}>
+              <Select value={duration} onValueChange={(v) => setDuration(v || '')}>
                 <SelectTrigger><SelectValue placeholder="How long?" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="<1hr">Less than 1 hour</SelectItem>

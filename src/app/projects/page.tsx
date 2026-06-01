@@ -71,7 +71,7 @@ export default function ProjectsPage() {
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
-        <Select value={domain} onValueChange={setDomain}>
+        <Select value={domain} onValueChange={(v) => setDomain(v || '')}>
           <SelectTrigger className="w-full sm:w-44">
             <SelectValue placeholder="Domain" />
           </SelectTrigger>
@@ -80,7 +80,7 @@ export default function ProjectsPage() {
             {DOMAINS.map((d) => (<SelectItem key={d} value={d}>{d}</SelectItem>))}
           </SelectContent>
         </Select>
-        <Select value={tier} onValueChange={setTier}>
+        <Select value={tier} onValueChange={(v) => setTier(v || '')}>
           <SelectTrigger className="w-full sm:w-40">
             <SelectValue placeholder="Tier" />
           </SelectTrigger>
@@ -91,7 +91,7 @@ export default function ProjectsPage() {
             <SelectItem value="3">Advanced</SelectItem>
           </SelectContent>
         </Select>
-        <Select value={sort} onValueChange={setSort}>
+        <Select value={sort} onValueChange={(v) => setSort(v || '')}>
           <SelectTrigger className="w-full sm:w-40">
             <SelectValue placeholder="Sort by" />
           </SelectTrigger>

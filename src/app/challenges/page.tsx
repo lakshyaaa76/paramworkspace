@@ -65,7 +65,7 @@ export default function ChallengesPage() {
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
-        <Select value={tier} onValueChange={setTier}>
+        <Select value={tier} onValueChange={(v) => setTier(v || '')}>
           <SelectTrigger className="w-full sm:w-40"><SelectValue placeholder="Tier" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Tiers</SelectItem>
@@ -75,7 +75,7 @@ export default function ChallengesPage() {
             <SelectItem value="4">Expert</SelectItem>
           </SelectContent>
         </Select>
-        <Select value={domain} onValueChange={setDomain}>
+        <Select value={domain} onValueChange={(v) => setDomain(v || '')}>
           <SelectTrigger className="w-full sm:w-44"><SelectValue placeholder="Domain" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Domains</SelectItem>

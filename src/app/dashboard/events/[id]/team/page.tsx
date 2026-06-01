@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
+import { Badge } from '@/components/ui/badge'
 import { createClient } from '@/lib/supabase/client'
 import { useAuthStore } from '@/lib/stores/auth-store'
 import { toast } from 'sonner'

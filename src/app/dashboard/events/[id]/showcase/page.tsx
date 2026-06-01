@@ -41,7 +41,7 @@ export default function ShowcaseBookingPage() {
 
   const [event, setEvent] = useState<Event | null>(null)
   const [existingSlot, setExistingSlot] = useState<ShowcaseSlot | null>(null)
-  const [myProjects, setMyProjects] = useState<Project[]>([])
+  const [myProjects, setMyProjects] = useState<{id: string, title: string}[]>([])
   const [loading, setLoading] = useState(true)
   const [actionLoading, setActionLoading] = useState(false)
 
@@ -200,7 +200,7 @@ export default function ShowcaseBookingPage() {
               <div className="grid sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Type *</Label>
-                  <Select value={type} onValueChange={setType} required>
+                  <Select value={type} onValueChange={(v) => setType(v || '')} required>
                     <SelectTrigger><SelectValue placeholder="Select type" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="demo">Live Demo</SelectItem>
@@ -212,7 +212,7 @@ export default function ShowcaseBookingPage() {
                 
                 <div className="space-y-2">
                   <Label>Link to Project (Optional)</Label>
-                  <Select value={projectId} onValueChange={setProjectId}>
+                  <Select value={projectId} onValueChange={(v) => setProjectId(v || '')}>
                     <SelectTrigger><SelectValue placeholder="Select a project" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="none">None</SelectItem>

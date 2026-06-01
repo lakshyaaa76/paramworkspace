@@ -9,6 +9,7 @@ interface AuthGateProps {
   feature?: Feature
   fallbackMessage?: string
   className?: string
+  showFallback?: boolean
 }
 
 /**
