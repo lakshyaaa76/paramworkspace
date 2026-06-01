@@ -4,6 +4,7 @@ import './globals.css'
 import { Header } from '@/components/layout/Header'
 import { Footer } from '@/components/layout/Footer'
 import { Toaster } from '@/components/ui/sonner'
+import { AuthProvider } from '@/components/auth/AuthProvider'
 
 
 export const metadata: Metadata = {
@@ -21,10 +22,12 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="antialiased min-h-screen flex flex-col grain font-sans">
-        <Header />
-        <main className="flex-1 relative z-10">{children}</main>
-        <Footer />
-        <Toaster />
+        <AuthProvider>
+          <Header />
+          <main className="flex-1 relative z-10">{children}</main>
+          <Footer />
+          <Toaster />
+        </AuthProvider>
       </body>
     </html>
   )

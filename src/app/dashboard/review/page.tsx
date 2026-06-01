@@ -1,144 +1,198 @@
 'use client'
 
-import { useState } from 'react'
-import { ClipboardCheck, Check, X, Eye, MessageSquare } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { CheckCircle, XCircle, FolderKanban, ExternalLink } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Separator } from '@/components/ui/separator'
+import { Textarea } from '@/components/ui/textarea'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
+import { createClient } from '@/lib/supabase/client'
 import { useAuthStore } from '@/lib/stores/auth-store'
 import { toast } from 'sonner'
+import type { Project } from '@/lib/types'
 
-const pendingProjects = [
-  { id: '1', title: 'Smart Doorbell v2', maker: 'Aarav Maker', domain: 'IoT', tier: 2, submitted: '2 days ago', summary: 'A smart doorbell with facial recognition and cloud notifications.' },
-  { id: '2', title: 'Drone Delivery System', maker: 'Neha S.', domain: 'Robotics', tier: 3, submitted: '3 days ago', summary: 'GPS-guided drone for campus package delivery with obstacle avoidance.' },
-  { id: '3', title: 'Solar Tracker', maker: 'Vikram R.', domain: 'Electronics', tier: 1, submitted: '5 days ago', summary: 'Arduino-based solar panel tracker that follows the sun for max efficiency.' },
-  { id: '4', title: 'Voice-Controlled Robot Arm', maker: 'Priya N.', domain: 'AI/ML', tier: 2, submitted: '1 week ago', summary: 'A 6-DOF robotic arm controlled via voice commands using NLP.' },
-  { id: '5', title: 'Plant Health Monitor', maker: 'Arjun K.', domain: 'IoT', tier: 1, submitted: '1 week ago', summary: 'Uses computer vision to detect plant diseases from leaf images.' },
-]
-
-const statusColors: Record<string, string> = {
-  pending: 'bg-amber-500/10 text-amber-500 border-amber-500/20',
-  approved: 'bg-green-500/10 text-green-500 border-green-500/20',
-  rejected: 'bg-red-500/10 text-red-500 border-red-500/20',
+type ProjectWithOwner = Project & {
+  app_user: { name: string; email: string } | null
 }
 
 export default function ReviewProjectsPage() {
-  const { hasRole } = useAuthStore()
-  const [projects, setProjects] = useState(
-    pendingProjects.map((p) => ({ ...p, status: 'pending' as 'pending' | 'approved' | 'rejected', feedback: '' }))
-  )
+  const { user } = useAuthStore()
+  const supabase = createClient()
+  const [projects, setProjects] = useState<ProjectWithOwner[]>([])
+  const [loading, setLoading] = useState(true)
+  const [rejectTarget, setRejectTarget] = useState<string | null>(null)
+  const [rejectReason, setRejectReason] = useState('')
+  const [actionLoading, setActionLoading] = useState(false)
 
-  if (!hasRole('mentor')) {
-    return (
-      <div className="flex items-center justify-center min-h-[40vh]">
-        <p className="text-muted-foreground">You need Mentor or Admin access to view this page.</p>
-      </div>
-    )
+  const fetchPending = async () => {
+    setLoading(true)
+    const { data, error } = await supabase
+      .from('project')
+      .select('*, app_user!project_owner_id_fkey(name, email)')
+      .eq('status', 'pending_review')
+      .order('created_at', { ascending: true })
+
+    if (error) {
+      console.error('Fetch pending projects error:', error)
+      toast.error('Failed to load review queue: ' + error.message)
+    } else {
+      setProjects((data as ProjectWithOwner[]) ?? [])
+    }
+    setLoading(false)
   }
 
-  const handleApprove = (id: string) => {
-    setProjects((prev) =>
-      prev.map((p) => (p.id === id ? { ...p, status: 'approved' as const } : p))
-    )
-    toast.success('Project approved!')
+  useEffect(() => {
+    fetchPending()
+  }, [])
+
+  const handleApprove = async (projectId: string) => {
+    setActionLoading(true)
+    const { error } = await supabase
+      .from('project')
+      .update({ status: 'active', visibility: 'public', mentor_id: user!.id })
+      .eq('id', projectId)
+
+    if (error) {
+      toast.error('Approval failed: ' + error.message)
+    } else {
+      toast.success('Project approved and published! ✅')
+      fetchPending()
+    }
+    setActionLoading(false)
   }
 
-  const handleReject = (id: string) => {
-    setProjects((prev) =>
-      prev.map((p) => (p.id === id ? { ...p, status: 'rejected' as const } : p))
-    )
-    toast.error('Project rejected')
-  }
+  const handleReject = async () => {
+    if (!rejectTarget) return
+    setActionLoading(true)
+    const { error } = await supabase
+      .from('project')
+      .update({ status: 'rejected' })
+      .eq('id', rejectTarget)
 
-  const pending = projects.filter((p) => p.status === 'pending')
-  const reviewed = projects.filter((p) => p.status !== 'pending')
+    if (error) {
+      toast.error('Rejection failed: ' + error.message)
+    } else {
+      toast.success('Project rejected.')
+      setRejectTarget(null)
+      setRejectReason('')
+      fetchPending()
+    }
+    setActionLoading(false)
+  }
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-8">
-        <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2">
-            <ClipboardCheck className="h-6 w-6 text-brand-ocean" />
-            Review Projects
-          </h1>
-          <p className="text-muted-foreground">Approve or reject submitted projects</p>
-        </div>
-        <Badge variant="secondary" className="text-sm">{pending.length} pending</Badge>
+      <div className="mb-8">
+        <h1 className="text-2xl font-bold">Review Queue</h1>
+        <p className="text-muted-foreground">
+          Projects pending approval — {projects.length} waiting
+        </p>
       </div>
 
-      {/* Pending */}
-      {pending.length > 0 ? (
-        <div className="space-y-4 mb-10">
-          {pending.map((project) => (
-            <Card key={project.id} className="border-amber-500/20">
-              <CardContent className="p-5">
-                <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-2">
-                      <h3 className="font-bold text-lg">{project.title}</h3>
-                      <Badge className={statusColors.pending}>Pending</Badge>
+      {loading ? (
+        <div className="flex items-center justify-center py-20">
+          <div className="h-8 w-8 animate-spin rounded-full border-4 border-brand-ocean border-t-transparent" />
+        </div>
+      ) : projects.length === 0 ? (
+        <Card className="p-12 text-center">
+          <CheckCircle className="h-12 w-12 text-green-500/40 mx-auto mb-4" />
+          <h3 className="font-semibold mb-1">All caught up!</h3>
+          <p className="text-sm text-muted-foreground">No projects waiting for review.</p>
+        </Card>
+      ) : (
+        <div className="space-y-4">
+          {projects.map((p) => (
+            <Card key={p.id} className="border-amber-500/20">
+              <CardHeader className="pb-3">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-brand-deep/10 to-brand-ocean/10 flex items-center justify-center">
+                      <FolderKanban className="h-5 w-5 text-brand-ocean/50" />
                     </div>
-                    <p className="text-sm text-muted-foreground mb-2">{project.summary}</p>
-                    <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                      <span>by <strong>{project.maker}</strong></span>
-                      <Badge variant="outline" className="text-xs">{project.domain}</Badge>
-                      <span>Tier {project.tier}</span>
-                      <span>Submitted {project.submitted}</span>
+                    <div>
+                      <CardTitle className="text-base">{p.title}</CardTitle>
+                      <p className="text-sm text-muted-foreground">
+                        by {p.app_user?.name ?? 'Unknown'} · {p.app_user?.email}
+                      </p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
-                    <Button variant="outline" size="sm">
-                      <Eye className="mr-1.5 h-3.5 w-3.5" /> View
-                    </Button>
-                    <Button
-                      size="sm"
-                      className="bg-green-600 hover:bg-green-700 text-white"
-                      onClick={() => handleApprove(project.id)}
-                    >
-                      <Check className="mr-1.5 h-3.5 w-3.5" /> Approve
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="destructive"
-                      onClick={() => handleReject(project.id)}
-                    >
-                      <X className="mr-1.5 h-3.5 w-3.5" /> Reject
-                    </Button>
+                    {p.domain && <Badge variant="outline">{p.domain}</Badge>}
+                    {p.tier && (
+                      <Badge variant="secondary">
+                        {['', 'Beginner', 'Intermediate', 'Advanced'][p.tier]}
+                      </Badge>
+                    )}
                   </div>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {p.one_line_summary && (
+                  <p className="text-sm text-muted-foreground mb-4">{p.one_line_summary}</p>
+                )}
+                {p.github_url && (
+                  <a
+                    href={p.github_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-xs text-brand-ocean hover:underline mb-4"
+                  >
+                    <ExternalLink className="h-3 w-3" /> View on GitHub
+                  </a>
+                )}
+                <div className="flex gap-3 pt-2 border-t">
+                  <Button
+                    className="flex-1 bg-green-600 hover:bg-green-700 text-white"
+                    onClick={() => handleApprove(p.id)}
+                    disabled={actionLoading}
+                  >
+                    <CheckCircle className="mr-2 h-4 w-4" /> Approve & Publish
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="flex-1 border-red-500/30 text-red-500 hover:bg-red-500/10"
+                    onClick={() => setRejectTarget(p.id)}
+                    disabled={actionLoading}
+                  >
+                    <XCircle className="mr-2 h-4 w-4" /> Reject
+                  </Button>
                 </div>
               </CardContent>
             </Card>
           ))}
         </div>
-      ) : (
-        <Card className="mb-10">
-          <CardContent className="p-8 text-center">
-            <p className="text-muted-foreground">🎉 All projects have been reviewed!</p>
-          </CardContent>
-        </Card>
       )}
 
-      {/* Reviewed */}
-      {reviewed.length > 0 && (
-        <>
-          <Separator className="mb-6" />
-          <h2 className="text-lg font-bold mb-4">Recently Reviewed</h2>
-          <div className="space-y-3">
-            {reviewed.map((project) => (
-              <Card key={project.id} className="opacity-75">
-                <CardContent className="p-4 flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <h3 className="font-semibold text-sm">{project.title}</h3>
-                    <Badge className={statusColors[project.status]}>{project.status}</Badge>
-                  </div>
-                  <span className="text-xs text-muted-foreground">by {project.maker}</span>
-                </CardContent>
-              </Card>
-            ))}
+      {/* Reject modal */}
+      <Dialog open={!!rejectTarget} onOpenChange={(open) => !open && setRejectTarget(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reject Project</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <p className="text-sm text-muted-foreground">
+              Provide feedback so the maker knows what to improve:
+            </p>
+            <Textarea
+              placeholder="Explain what needs to be changed..."
+              rows={4}
+              value={rejectReason}
+              onChange={(e) => setRejectReason(e.target.value)}
+            />
           </div>
-        </>
-      )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRejectTarget(null)}>Cancel</Button>
+            <Button
+              variant="destructive"
+              onClick={handleReject}
+              disabled={actionLoading}
+            >
+              Confirm Rejection
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

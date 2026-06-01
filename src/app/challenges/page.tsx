@@ -1,20 +1,53 @@
+'use client'
+
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { Search } from 'lucide-react'
+import { Search, Trophy } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { DOMAINS } from '@/lib/constants/domains'
+import { createClient } from '@/lib/supabase/client'
+import type { Challenge } from '@/lib/types'
 
-const mockChallenges = [
-  { id: '1', title: 'Build Your First Arduino Robot', tier: 'Beginner', domain: 'Robotics', time: '2–4 hours', completions: 50, icon: '🤖', desc: 'Learn basics of electronics and programming' },
-  { id: '2', title: 'IoT Weather Station', tier: 'Intermediate', domain: 'IoT', time: '4–8 hours', completions: 23, icon: '🌦️', desc: 'Connect sensors to the cloud' },
-  { id: '3', title: 'LED Matrix Art Display', tier: 'Beginner', domain: 'Electronics', time: '1–2 hours', completions: 67, icon: '💡', desc: 'Create stunning pixel art animations' },
-  { id: '4', title: 'Smart Home Dashboard', tier: 'Advanced', domain: 'Web Development', time: '8+ hours', completions: 12, icon: '🏠', desc: 'Build a full-stack home automation dashboard' },
-  { id: '5', title: 'PCB Design Basics', tier: 'Beginner', domain: 'Electronics', time: '2–4 hours', completions: 34, icon: '🔌', desc: 'Design your first printed circuit board' },
-  { id: '6', title: '3D Print a Mechanical Clock', tier: 'Intermediate', domain: '3D Printing', time: '4–8 hours', completions: 18, icon: '⏰', desc: 'Master gears and mechanisms through 3D printing' },
-]
+const TIERS: Record<number, string> = { 1: 'Beginner', 2: 'Intermediate', 3: 'Advanced', 4: 'Expert' }
 
 export default function ChallengesPage() {
+  const supabase = createClient()
+  const [challenges, setChallenges] = useState<Challenge[]>([])
+  const [loading, setLoading] = useState(true)
+  const [search, setSearch] = useState('')
+  const [domain, setDomain] = useState('all')
+  const [tier, setTier] = useState('all')
+
+  const fetchChallenges = async () => {
+    setLoading(true)
+    let query = supabase
+      .from('challenge')
+      .select('*')
+      .eq('status', 'published')
+
+    if (domain && domain !== 'all') query = query.eq('domain', domain)
+    if (tier && tier !== 'all') query = query.eq('tier', parseInt(tier))
+    if (search.trim()) query = query.ilike('title', `%${search.trim()}%`)
+
+    query = query.order('created_at', { ascending: false })
+
+    const { data, error } = await query.limit(20)
+    if (!error) setChallenges(data ?? [])
+    setLoading(false)
+  }
+
+  useEffect(() => {
+    fetchChallenges()
+  }, [domain, tier])
+
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault()
+    fetchChallenges()
+  }
+
   return (
     <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-10">
       <div className="mb-8">
@@ -22,54 +55,73 @@ export default function ChallengesPage() {
         <p className="text-muted-foreground text-lg">Learn by doing — pick a challenge and start building</p>
       </div>
 
-      <div className="flex flex-col sm:flex-row gap-3 mb-8">
+      <form onSubmit={handleSearch} className="flex flex-col sm:flex-row gap-3 mb-8">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input placeholder="Search challenges..." className="pl-9" />
+          <Input
+            placeholder="Search challenges..."
+            className="pl-9"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
         </div>
-        <Select>
+        <Select value={tier} onValueChange={setTier}>
           <SelectTrigger className="w-full sm:w-40"><SelectValue placeholder="Tier" /></SelectTrigger>
           <SelectContent>
-            <SelectItem value="beginner">Beginner</SelectItem>
-            <SelectItem value="intermediate">Intermediate</SelectItem>
-            <SelectItem value="advanced">Advanced</SelectItem>
+            <SelectItem value="all">All Tiers</SelectItem>
+            <SelectItem value="1">Beginner</SelectItem>
+            <SelectItem value="2">Intermediate</SelectItem>
+            <SelectItem value="3">Advanced</SelectItem>
+            <SelectItem value="4">Expert</SelectItem>
           </SelectContent>
         </Select>
-        <Select>
+        <Select value={domain} onValueChange={setDomain}>
           <SelectTrigger className="w-full sm:w-44"><SelectValue placeholder="Domain" /></SelectTrigger>
           <SelectContent>
-            <SelectItem value="robotics">Robotics</SelectItem>
-            <SelectItem value="iot">IoT</SelectItem>
-            <SelectItem value="electronics">Electronics</SelectItem>
-            <SelectItem value="3d-printing">3D Printing</SelectItem>
-            <SelectItem value="web">Web Development</SelectItem>
+            <SelectItem value="all">All Domains</SelectItem>
+            {DOMAINS.map((d) => (<SelectItem key={d} value={d}>{d}</SelectItem>))}
           </SelectContent>
         </Select>
-      </div>
+      </form>
 
-      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
-        {mockChallenges.map((c) => (
-          <Link key={c.id} href={`/challenges/${c.id}`}>
-            <Card className="group h-full transition-all duration-300 hover:shadow-lg hover:border-brand-ocean/30 hover:-translate-y-1">
-              <CardHeader>
-                <div className="text-3xl mb-2">{c.icon}</div>
-                <div className="flex items-center gap-2 mb-1">
-                  <Badge variant="secondary" className="text-xs">{c.tier}</Badge>
-                  <Badge variant="outline" className="text-xs">{c.domain}</Badge>
-                </div>
-                <CardTitle className="text-base group-hover:text-brand-ocean transition-colors">{c.title}</CardTitle>
-                <CardDescription>{c.desc}</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="flex items-center justify-between text-sm text-muted-foreground">
-                  <span>⏱️ {c.time}</span>
-                  <span>✅ {c.completions} completed</span>
-                </div>
-              </CardContent>
-            </Card>
-          </Link>
-        ))}
-      </div>
+      {loading ? (
+        <div className="flex items-center justify-center py-20">
+          <div className="h-8 w-8 animate-spin rounded-full border-4 border-brand-ocean border-t-transparent" />
+        </div>
+      ) : challenges.length === 0 ? (
+        <div className="text-center py-20">
+          <Trophy className="h-12 w-12 text-muted-foreground/30 mx-auto mb-4" />
+          <h3 className="font-semibold mb-2">No challenges found</h3>
+          <p className="text-sm text-muted-foreground">Try adjusting your filters or check back later.</p>
+        </div>
+      ) : (
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
+          {challenges.map((c) => (
+            <Link key={c.id} href={`/challenges/${c.id}`}>
+              <Card className="group h-full transition-all duration-300 hover:shadow-lg hover:border-brand-ocean/30 hover:-translate-y-1">
+                <CardHeader>
+                  <div className="text-3xl mb-2">🏆</div>
+                  <div className="flex items-center gap-2 mb-1">
+                    {c.tier && <Badge variant="secondary" className="text-xs">{TIERS[c.tier]}</Badge>}
+                    {c.domain && <Badge variant="outline" className="text-xs">{c.domain}</Badge>}
+                  </div>
+                  <CardTitle className="text-base group-hover:text-brand-ocean transition-colors">
+                    {c.title}
+                  </CardTitle>
+                  {c.mystery && (
+                    <CardDescription className="line-clamp-2">{c.mystery}</CardDescription>
+                  )}
+                </CardHeader>
+                <CardContent>
+                  <div className="flex items-center justify-between text-sm text-muted-foreground">
+                    {c.time_estimate && <span>⏱️ {c.time_estimate}</span>}
+                  </div>
+                </CardContent>
+              </Card>
+            </Link>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

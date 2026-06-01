@@ -1,6 +1,8 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
+import { useParams } from 'next/navigation'
 import { ArrowLeft, FolderKanban, Github, Calendar, Users, FileText, ExternalLink, LogIn } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -8,87 +10,135 @@ import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { AuthGate } from '@/components/auth/AuthGate'
 import { useAuthStore } from '@/lib/stores/auth-store'
+import { BookmarkButton } from '@/components/shared/BookmarkButton'
+import { ReactionButtons } from '@/components/shared/ReactionButtons'
+import { CommentSection } from '@/components/shared/CommentSection'
+import { createClient } from '@/lib/supabase/client'
+import type { Project } from '@/lib/types'
 
-// Mock single project data
-const project = {
-  id: '1',
-  title: 'IoT Plant Monitor',
-  one_line_summary: 'Smart plant watering system with real-time soil sensors and automated alerts',
-  description: `## Overview\n\nThis project uses an ESP32 microcontroller connected to soil moisture sensors, temperature sensors, and a water pump to automatically monitor and water plants.\n\n## Features\n\n- Real-time soil moisture monitoring\n- Automatic watering when soil is dry\n- Temperature and humidity tracking\n- Cloud dashboard with historical data\n- Mobile push notifications\n- Solar-powered option\n\n## Technical Details\n\nThe system uses MQTT protocol to communicate with a cloud server, where data is stored and visualized. The frontend dashboard is built with React and shows real-time sensor readings plus historical charts.`,
-  maker: 'Sarah K.',
-  domain: 'IoT',
-  tier: 2,
-  status: 'active',
-  github_url: 'https://github.com/sarahk/iot-plant-monitor',
-  duration_estimate: '1 week',
-  tags: ['IoT', 'ESP32', 'Sensors', 'Agriculture'],
-  milestones: [
-    { title: 'Hardware Setup', description: 'Connect sensors to ESP32', completed: true },
-    { title: 'Firmware Development', description: 'Write sensor reading and MQTT code', completed: true },
-    { title: 'Cloud Backend', description: 'Set up MQTT broker and database', completed: true },
-    { title: 'Dashboard', description: 'Build React dashboard', completed: false },
-  ],
-  members: ['Sarah K.', 'Alex M.'],
-  files: [
-    { name: 'firmware.ino', type: 'code', size: '12 KB' },
-    { name: 'schematic.pdf', type: 'pdf', size: '340 KB' },
-    { name: 'enclosure.stl', type: 'stl', size: '1.2 MB' },
-  ],
+type ProjectDetails = Project & {
+  app_user: { name: string } | null
+  project_image: { image_url: string; display_order: number }[]
+  project_file: { file_name: string; file_type: string; file_url: string; file_size_bytes: number | null }[]
+  project_video: { video_url: string; display_order: number; title: string | null }[]
+  project_milestone: { title: string; description: string | null; completed_at: string | null }[]
+  entity_tag: { tag: { name: string } }[]
 }
+
+const TIERS: Record<number, string> = { 1: 'Beginner', 2: 'Intermediate', 3: 'Advanced' }
 
 export default function SingleProjectPage() {
   const { isAuthenticated } = useAuthStore()
+  const params = useParams()
+  const projectId = params.id as string
+  const supabase = createClient()
+  
+  const [project, setProject] = useState<ProjectDetails | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    const fetchProject = async () => {
+      const { data, error } = await supabase
+        .from('project')
+        .select(`
+          *,
+          app_user!project_owner_id_fkey(name),
+          project_image(image_url, display_order),
+          project_file(file_name, file_type, file_url, file_size),
+          project_video(video_url, display_order, title),
+          project_milestone(title, description, is_completed),
+          entity_tag(tag(name))
+        `)
+        .eq('id', projectId)
+        .single()
+
+      if (!error && data) {
+        setProject(data as ProjectDetails)
+      }
+      setLoading(false)
+    }
+
+    if (projectId) {
+      fetchProject()
+    }
+  }, [projectId, supabase])
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-40">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-brand-ocean border-t-transparent" />
+      </div>
+    )
+  }
+
+  if (!project) {
+    return (
+      <div className="flex flex-col items-center justify-center py-40 text-center">
+        <FolderKanban className="h-16 w-16 text-muted-foreground/30 mb-4" />
+        <h1 className="text-2xl font-bold mb-2">Project not found</h1>
+        <p className="text-muted-foreground mb-6">This project may have been removed or is currently private.</p>
+        <Button asChild><Link href="/projects">Browse all projects</Link></Button>
+      </div>
+    )
+  }
+
+  const coverImage = project.project_image?.find(img => img.display_order === 1)?.image_url
 
   return (
     <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8 py-10">
       {/* Back button */}
       <Button variant="ghost" size="sm" className="mb-6" asChild>
         <Link href="/projects">
-          <ArrowLeft className="mr-2 h-4 w-4" />
-          Back to Projects
+          <ArrowLeft className="mr-2 h-4 w-4" /> Back to Projects
         </Link>
       </Button>
 
       {/* Cover Image */}
-      <div className="aspect-video bg-gradient-to-br from-brand-deep/10 via-brand-ocean/10 to-brand-sky/10 rounded-xl flex items-center justify-center mb-8">
-        <FolderKanban className="h-20 w-20 text-brand-ocean/30" />
+      <div className="aspect-video bg-gradient-to-br from-brand-deep/10 via-brand-ocean/10 to-brand-sky/10 rounded-xl flex items-center justify-center mb-8 overflow-hidden relative border border-border/50">
+        {coverImage ? (
+          <img src={coverImage} alt={project.title} className="w-full h-full object-cover" />
+        ) : (
+          <FolderKanban className="h-20 w-20 text-brand-ocean/30" />
+        )}
       </div>
 
       {/* Header area */}
       <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-6 mb-8">
         <div className="flex-1">
           <div className="flex items-center gap-2 mb-3">
-            <Badge variant="secondary">{project.domain}</Badge>
-            <Badge variant="outline">Tier {project.tier}</Badge>
+            {project.domain && <Badge variant="secondary">{project.domain}</Badge>}
+            {project.tier && <Badge variant="outline">Tier {TIERS[project.tier]}</Badge>}
             <Badge className="bg-green-500/10 text-green-500 border-green-500/20">Active</Badge>
           </div>
           <h1 className="text-3xl font-bold mb-2">{project.title}</h1>
-          <p className="text-lg text-muted-foreground mb-3">{project.one_line_summary}</p>
+          {project.one_line_summary && (
+            <p className="text-lg text-muted-foreground mb-3">{project.one_line_summary}</p>
+          )}
           <div className="flex items-center gap-4 text-sm text-muted-foreground">
-            <span className="flex items-center gap-1"><Users className="h-4 w-4" /> by {project.maker}</span>
-            <span className="flex items-center gap-1"><Calendar className="h-4 w-4" /> {project.duration_estimate}</span>
+            <span className="flex items-center gap-1"><Users className="h-4 w-4" /> by {project.app_user?.name ?? 'Unknown'}</span>
+            {project.duration_estimate && (
+              <span className="flex items-center gap-1"><Calendar className="h-4 w-4" /> {project.duration_estimate}</span>
+            )}
           </div>
         </div>
 
         {/* Actions */}
-        <div className="flex flex-col gap-2 min-w-[160px]">
-          <AuthGate feature="like_bookmark" fallbackMessage="Log in to interact with projects">
-            {isAuthenticated ? (
-              <>
-                <Button className="bg-gradient-to-r from-brand-deep to-brand-ocean text-white">❤️ Like</Button>
-                <Button variant="outline">⬆️ Upvote</Button>
-                <Button variant="outline">🔖 Bookmark</Button>
-              </>
-            ) : (
-              <Button variant="outline" asChild>
-                <Link href="/auth/login"><LogIn className="mr-2 h-4 w-4" /> Log in to Interact</Link>
-              </Button>
-            )}
-          </AuthGate>
+        <div className="flex flex-col gap-2 min-w-[180px]">
+          {isAuthenticated ? (
+            <div className="flex flex-col gap-2">
+              <ReactionButtons targetType="project" targetId={project.id} />
+              <BookmarkButton targetType="project" targetId={project.id} className="w-full justify-center" />
+            </div>
+          ) : (
+            <Button variant="outline" asChild>
+              <Link href="/auth/login"><LogIn className="mr-2 h-4 w-4" /> Log in to Interact</Link>
+            </Button>
+          )}
+          
           {project.github_url && (
             <Button variant="outline" asChild>
               <a href={project.github_url} target="_blank" rel="noopener noreferrer">
-                <Github className="mr-2 h-4 w-4" /> GitHub
+                <Github className="mr-2 h-4 w-4" /> GitHub Repository
               </a>
             </Button>
           )}
@@ -98,87 +148,103 @@ export default function SingleProjectPage() {
       <Separator className="mb-8" />
 
       {/* Tags */}
-      <div className="flex flex-wrap gap-2 mb-8">
-        {project.tags.map((tag) => (
-          <Link key={tag} href={`/tags/${tag.toLowerCase()}`}>
-            <Badge variant="secondary" className="cursor-pointer hover:bg-brand-ocean/10">{tag}</Badge>
-          </Link>
-        ))}
-      </div>
+      {project.entity_tag && project.entity_tag.length > 0 && (
+        <div className="flex flex-wrap gap-2 mb-8">
+          {project.entity_tag.map(({ tag }) => (
+            <Link key={tag.name} href={`/tags/${tag.name.toLowerCase()}`}>
+              <Badge variant="secondary" className="cursor-pointer hover:bg-brand-ocean/10">{tag.name}</Badge>
+            </Link>
+          ))}
+        </div>
+      )}
 
       {/* Description */}
-      <Card className="mb-8">
-        <CardHeader><CardTitle>Description</CardTitle></CardHeader>
-        <CardContent className="prose prose-sm dark:prose-invert max-w-none">
-          <div className="whitespace-pre-wrap text-sm text-muted-foreground leading-relaxed">
-            {project.description}
+      <Card className="mb-8 border-border/50 shadow-sm">
+        <CardHeader className="bg-muted/30 border-b border-border/50 pb-4"><CardTitle>Description</CardTitle></CardHeader>
+        <CardContent className="prose prose-sm dark:prose-invert max-w-none pt-6">
+          <div className="whitespace-pre-wrap text-sm text-foreground/90 leading-relaxed">
+            {project.description || 'No description provided.'}
           </div>
         </CardContent>
       </Card>
 
-      {/* Milestones */}
-      <Card className="mb-8">
-        <CardHeader><CardTitle>Milestones</CardTitle></CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            {project.milestones.map((m, i) => (
-              <div key={i} className="flex items-start gap-3">
-                <div className={`mt-0.5 h-6 w-6 rounded-full flex items-center justify-center text-xs font-bold ${m.completed ? 'bg-green-500/10 text-green-500' : 'bg-muted text-muted-foreground'}`}>
-                  {m.completed ? '✓' : i + 1}
+      <div className="grid md:grid-cols-3 gap-8">
+        <div className="md:col-span-2 space-y-8">
+          {/* Milestones */}
+          {project.project_milestone && project.project_milestone.length > 0 && (
+            <Card className="border-border/50 shadow-sm">
+              <CardHeader className="bg-muted/30 border-b border-border/50 pb-4"><CardTitle>Milestones</CardTitle></CardHeader>
+              <CardContent className="pt-6">
+                <div className="space-y-4">
+                  {project.project_milestone.map((m, i) => {
+                    const done = !!m.completed_at
+                    return (
+                      <div key={i} className="flex items-start gap-3">
+                        <div className={`mt-0.5 h-6 w-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${done ? 'bg-green-500/10 text-green-500' : 'bg-muted text-muted-foreground'}`}>
+                          {done ? '✓' : i + 1}
+                        </div>
+                        <div>
+                          <p className={`font-medium text-sm ${done ? 'line-through text-muted-foreground' : ''}`}>{m.title}</p>
+                          {m.description && <p className="text-xs text-muted-foreground mt-1">{m.description}</p>}
+                        </div>
+                      </div>
+                    )
+                  })}
                 </div>
-                <div>
-                  <p className={`font-medium text-sm ${m.completed ? 'line-through text-muted-foreground' : ''}`}>{m.title}</p>
-                  <p className="text-xs text-muted-foreground">{m.description}</p>
+              </CardContent>
+            </Card>
+          )}
+          
+          {/* Comments Section */}
+          <Card className="border-border/50 shadow-sm">
+            <CardHeader className="bg-muted/30 border-b border-border/50 pb-4"><CardTitle>Discussion</CardTitle></CardHeader>
+            <CardContent className="pt-6">
+              <CommentSection targetType="project" targetId={project.id} />
+            </CardContent>
+          </Card>
+        </div>
+        
+        <div className="space-y-8">
+          {/* Files */}
+          {project.project_file && project.project_file.length > 0 && (
+            <Card className="border-border/50 shadow-sm">
+              <CardHeader className="bg-muted/30 border-b border-border/50 pb-4"><CardTitle>Files</CardTitle></CardHeader>
+              <CardContent className="pt-6">
+                <div className="space-y-2">
+                  {project.project_file.map((f) => (
+                    <a key={f.file_url} href={f.file_url} target="_blank" rel="noopener noreferrer" className="flex items-center justify-between p-3 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors group">
+                      <div className="flex items-center gap-3 overflow-hidden">
+                        <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
+                        <span className="text-sm font-medium truncate group-hover:text-brand-ocean transition-colors">{f.file_name}</span>
+                      </div>
+                      <ExternalLink className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                    </a>
+                  ))}
                 </div>
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
+              </CardContent>
+            </Card>
+          )}
 
-      {/* Team */}
-      <Card className="mb-8">
-        <CardHeader><CardTitle>Team Members</CardTitle></CardHeader>
-        <CardContent>
-          <div className="flex flex-wrap gap-3">
-            {project.members.map((m) => (
-              <div key={m} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-muted/50">
-                <div className="h-8 w-8 rounded-full bg-brand-ocean/20 flex items-center justify-center text-xs font-bold text-brand-ocean">
-                  {m.split(' ').map(n => n[0]).join('')}
+          {/* Videos */}
+          {project.project_video && project.project_video.length > 0 && (
+            <Card className="border-border/50 shadow-sm">
+              <CardHeader className="bg-muted/30 border-b border-border/50 pb-4"><CardTitle>Videos</CardTitle></CardHeader>
+              <CardContent className="pt-6">
+                <div className="space-y-4">
+                  {project.project_video.map((v) => (
+                    <div key={v.video_url} className="aspect-video bg-muted rounded-lg overflow-hidden relative">
+                      <a href={v.video_url} target="_blank" rel="noopener noreferrer" className="absolute inset-0 flex flex-col items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/80 transition-all z-10">
+                        <ExternalLink className="h-6 w-6 mb-2" />
+                        <span className="text-xs font-medium px-4 text-center">{v.title || 'Watch Video'}</span>
+                      </a>
+                    </div>
+                  ))}
                 </div>
-                <span className="text-sm font-medium">{m}</span>
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Files */}
-      <Card className="mb-8">
-        <CardHeader><CardTitle>Files</CardTitle></CardHeader>
-        <CardContent>
-          <div className="space-y-2">
-            {project.files.map((f) => (
-              <div key={f.name} className="flex items-center justify-between p-3 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors">
-                <div className="flex items-center gap-3">
-                  <FileText className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-sm font-medium">{f.name}</span>
-                  <Badge variant="outline" className="text-xs">{f.type}</Badge>
-                </div>
-                <span className="text-xs text-muted-foreground">{f.size}</span>
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Comments placeholder */}
-      <Card>
-        <CardHeader><CardTitle>Comments</CardTitle></CardHeader>
-        <CardContent>
-          <p className="text-sm text-muted-foreground">Login as a Maker to leave comments.</p>
-        </CardContent>
-      </Card>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      </div>
     </div>
   )
 }

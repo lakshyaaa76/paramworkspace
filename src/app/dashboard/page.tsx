@@ -1,37 +1,13 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { FolderKanban, Trophy, Calendar, Wrench, ShoppingCart, Award, Plus, ArrowRight, ClipboardCheck, Users, Shield } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { useAuthStore } from '@/lib/stores/auth-store'
-
-const makerStats = [
-  { label: 'Projects', value: '3', sub: '1 draft, 2 active', icon: FolderKanban, href: '/dashboard/projects' },
-  { label: 'Badges', value: '5', sub: '2 new this month', icon: Award, href: '/badges' },
-  { label: 'Events', value: '2', sub: 'upcoming', icon: Calendar, href: '/dashboard/events' },
-  { label: 'Challenges', value: '4', sub: 'completed', icon: Trophy, href: '/dashboard/challenges' },
-  { label: 'Bookings', value: '1', sub: 'active', icon: Wrench, href: '/dashboard/equipment' },
-  { label: 'Orders', value: '0', sub: 'pending', icon: ShoppingCart, href: '/dashboard/orders' },
-]
-
-const mentorStats = [
-  { label: 'Pending Reviews', value: '7', sub: 'projects awaiting review', icon: ClipboardCheck, href: '/dashboard/review' },
-  { label: 'My Challenges', value: '3', sub: 'active challenges', icon: Trophy, href: '/dashboard/manage-challenges' },
-  { label: 'My Events', value: '2', sub: 'upcoming', icon: Calendar, href: '/dashboard/manage-events' },
-]
-
-const adminStats = [
-  { label: 'Total Users', value: '512', sub: '24 new this week', icon: Users, href: '/dashboard/manage-users' },
-  { label: 'Equipment', value: '18', sub: '2 in maintenance', icon: Wrench, href: '/dashboard/manage-equipment' },
-]
-
-const recentProjects = [
-  { id: '1', title: 'IoT Plant Monitor', status: 'active', updated: '2 days ago' },
-  { id: '2', title: 'Smart Doorbell v2', status: 'draft', updated: '1 week ago' },
-  { id: '3', title: 'Soil Sensor Network', status: 'active', updated: '3 weeks ago' },
-]
+import { createClient } from '@/lib/supabase/client'
 
 const statusColors: Record<string, string> = {
   draft: 'bg-gray-500/10 text-gray-500',
@@ -42,7 +18,95 @@ const statusColors: Record<string, string> = {
 
 export default function DashboardPage() {
   const { user, hasRole } = useAuthStore()
+  const supabase = createClient()
   const firstName = user?.name?.split(' ')[0] || 'Maker'
+
+  const [loading, setLoading] = useState(true)
+  const [stats, setStats] = useState({
+    projects: 0,
+    activeProjects: 0,
+    draftProjects: 0,
+    badges: 0,
+    events: 0,
+    challenges: 0,
+    bookings: 0,
+    orders: 0
+  })
+  const [mentorStatsData, setMentorStatsData] = useState({ pendingReviews: 0 })
+  const [adminStatsData, setAdminStatsData] = useState({ users: 0, equipment: 0 })
+  const [recentProjects, setRecentProjects] = useState<any[]>([])
+
+  useEffect(() => {
+    const fetchDashboard = async () => {
+      if (!user) return
+      
+      // Fetch Maker Stats
+      const [projsRes, badgesRes, eventsRes, challengesRes] = await Promise.all([
+        supabase.from('project').select('status, id, title, updated_at').eq('owner_id', user.id).order('updated_at', { ascending: false }),
+        supabase.from('user_badge').select('id', { count: 'exact' }).eq('user_id', user.id),
+        supabase.from('event_registration').select('id', { count: 'exact' }).eq('user_id', user.id),
+        supabase.from('challenge_completion').select('id', { count: 'exact' }).eq('user_id', user.id)
+      ])
+
+      const projects = projsRes.data || []
+      const draft = projects.filter(p => p.status === 'draft').length
+      const active = projects.filter(p => p.status === 'active').length
+
+      setStats({
+        projects: projects.length,
+        draftProjects: draft,
+        activeProjects: active,
+        badges: badgesRes.count || 0,
+        events: eventsRes.count || 0,
+        challenges: challengesRes.count || 0,
+        bookings: 0, // Mocked for now until ops wired
+        orders: 0
+      })
+      setRecentProjects(projects.slice(0, 3))
+
+      // Mentor Stats
+      if (hasRole('mentor') || hasRole('admin')) {
+        const { count } = await supabase.from('project').select('id', { count: 'exact' }).eq('status', 'pending_review')
+        setMentorStatsData({ pendingReviews: count || 0 })
+      }
+
+      // Admin Stats
+      if (hasRole('admin')) {
+        const [usersRes, equipRes] = await Promise.all([
+          supabase.from('app_user').select('id', { count: 'exact' }),
+          supabase.from('equipment').select('id', { count: 'exact' })
+        ])
+        setAdminStatsData({ users: usersRes.count || 0, equipment: equipRes.count || 0 })
+      }
+
+      setLoading(false)
+    }
+
+    fetchDashboard()
+  }, [user, hasRole])
+
+  const makerStats = [
+    { label: 'Projects', value: stats.projects.toString(), sub: `${stats.draftProjects} draft, ${stats.activeProjects} active`, icon: FolderKanban, href: '/dashboard/projects' },
+    { label: 'Badges', value: stats.badges.toString(), sub: 'earned so far', icon: Award, href: '/badges' },
+    { label: 'Events', value: stats.events.toString(), sub: 'registered', icon: Calendar, href: '/dashboard/events' },
+    { label: 'Challenges', value: stats.challenges.toString(), sub: 'completed', icon: Trophy, href: '/dashboard/challenges' },
+    { label: 'Bookings', value: stats.bookings.toString(), sub: 'active', icon: Wrench, href: '/dashboard/equipment' },
+    { label: 'Orders', value: stats.orders.toString(), sub: 'pending', icon: ShoppingCart, href: '/dashboard/orders' },
+  ]
+
+  const mentorStats = [
+    { label: 'Pending Reviews', value: mentorStatsData.pendingReviews.toString(), sub: 'projects awaiting review', icon: ClipboardCheck, href: '/dashboard/review' },
+    { label: 'My Challenges', value: '0', sub: 'active challenges', icon: Trophy, href: '/dashboard/manage-challenges' },
+    { label: 'My Events', value: '0', sub: 'upcoming', icon: Calendar, href: '/dashboard/manage-events' },
+  ]
+
+  const adminStats = [
+    { label: 'Total Users', value: adminStatsData.users.toString(), sub: 'platform wide', icon: Users, href: '/dashboard/manage-users' },
+    { label: 'Equipment', value: adminStatsData.equipment.toString(), sub: 'total inventory', icon: Wrench, href: '/dashboard/manage-equipment' },
+  ]
+
+  if (loading) return null
+
 
   return (
     <div>
@@ -146,8 +210,8 @@ export default function DashboardPage() {
                   <span className="text-sm font-medium group-hover:text-brand-ocean transition-colors">{p.title}</span>
                 </div>
                 <div className="flex items-center gap-3">
-                  <span className="text-xs text-muted-foreground">{p.updated}</span>
-                  <Badge className={`text-xs ${statusColors[p.status]}`}>{p.status}</Badge>
+                  <span className="text-xs text-muted-foreground">{new Date(p.updated_at).toLocaleDateString()}</span>
+                  <Badge className={`text-xs ${statusColors[p.status]}`}>{p.status.replace('_', ' ')}</Badge>
                 </div>
               </Link>
             ))}

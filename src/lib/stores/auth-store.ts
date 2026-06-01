@@ -2,44 +2,8 @@
 
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import { createClient } from '@/lib/supabase/client'
 import type { AppUser } from '@/lib/types'
-
-/* ─── Mock Users ─── */
-const MOCK_USERS: (AppUser & { password: string })[] = [
-  {
-    id: 'mock-maker-001',
-    name: 'Aarav Maker',
-    email: 'maker@param.dev',
-    password: 'maker123',
-    role: 'maker',
-    email_verified: true,
-    is_active: true,
-    created_at: '2025-01-01T00:00:00Z',
-    updated_at: '2025-01-01T00:00:00Z',
-  },
-  {
-    id: 'mock-mentor-001',
-    name: 'Priya Mentor',
-    email: 'mentor@param.dev',
-    password: 'mentor123',
-    role: 'mentor',
-    email_verified: true,
-    is_active: true,
-    created_at: '2025-01-01T00:00:00Z',
-    updated_at: '2025-01-01T00:00:00Z',
-  },
-  {
-    id: 'mock-admin-001',
-    name: 'Raj Admin',
-    email: 'admin@param.dev',
-    password: 'admin123',
-    role: 'admin',
-    email_verified: true,
-    is_active: true,
-    created_at: '2025-01-01T00:00:00Z',
-    updated_at: '2025-01-01T00:00:00Z',
-  },
-]
 
 /* ─── Role Hierarchy ─── */
 type Role = AppUser['role']
@@ -54,11 +18,13 @@ const ROLE_HIERARCHY: Record<Role, number> = {
 /* ─── Feature Permissions ─── */
 type Feature =
   | 'create_project'
+  | 'comment_react'
   | 'like_bookmark'
   | 'complete_challenge'
   | 'register_event'
   | 'book_equipment'
   | 'buy_store'
+  | 'public_profile'
   | 'review_projects'
   | 'manage_challenges'
   | 'manage_events'
@@ -67,26 +33,31 @@ type Feature =
   | 'manage_inventory'
 
 const FEATURE_MIN_ROLE: Record<Feature, Role> = {
-  create_project: 'maker',
-  like_bookmark: 'maker',
-  complete_challenge: 'maker',
-  register_event: 'maker',
-  book_equipment: 'maker',
-  buy_store: 'maker',
-  review_projects: 'mentor',
+  create_project:    'viewer',   // viewers CAN create (to become a maker)
+  complete_challenge:'viewer',   // viewers CAN complete challenges
+  register_event:    'viewer',   // viewers CAN register for events
+  book_equipment:    'viewer',   // viewers CAN book equipment
+  buy_store:         'viewer',   // viewers CAN buy from store
+  like_bookmark:     'viewer',   // viewers CAN bookmark
+  comment_react:     'maker',    // only makers can comment/react
+  public_profile:    'maker',    // only makers can make profile public
+  review_projects:   'mentor',
   manage_challenges: 'mentor',
-  manage_events: 'mentor',
-  manage_users: 'admin',
-  manage_equipment: 'admin',
-  manage_inventory: 'admin',
+  manage_events:     'mentor',
+  manage_users:      'admin',
+  manage_equipment:  'admin',
+  manage_inventory:  'admin',
 }
 
 /* ─── Store Interface ─── */
 interface AuthState {
   user: AppUser | null
   isAuthenticated: boolean
-  login: (email: string, password: string) => { success: boolean; error?: string }
-  logout: () => void
+  isLoading: boolean
+  login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>
+  logout: () => Promise<void>
+  setUser: (user: AppUser | null) => void
+  initAuth: () => Promise<void>
   hasRole: (minRole: Role) => boolean
   canAccess: (feature: Feature) => boolean
 }
@@ -96,21 +67,71 @@ export const useAuthStore = create<AuthState>()(
     (set, get) => ({
       user: null,
       isAuthenticated: false,
+      isLoading: false,
 
-      login: (email: string, password: string) => {
-        const found = MOCK_USERS.find(
-          (u) => u.email === email && u.password === password
-        )
-        if (!found) {
-          return { success: false, error: 'Invalid email or password' }
+      setUser: (user: AppUser | null) => {
+        set({ user, isAuthenticated: !!user })
+      },
+
+      initAuth: async () => {
+        const supabase = createClient()
+        set({ isLoading: true })
+        try {
+          const { data: { user: authUser } } = await supabase.auth.getUser()
+          if (!authUser) {
+            set({ user: null, isAuthenticated: false, isLoading: false })
+            return
+          }
+
+          const { data: appUser } = await supabase
+            .from('app_user')
+            .select('*')
+            .eq('id', authUser.id)
+            .single()
+
+          set({
+            user: appUser ?? null,
+            isAuthenticated: !!appUser,
+            isLoading: false,
+          })
+        } catch {
+          set({ user: null, isAuthenticated: false, isLoading: false })
         }
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        const { password: _pw, ...user } = found
-        set({ user, isAuthenticated: true })
+      },
+
+      login: async (email: string, password: string) => {
+        const supabase = createClient()
+        set({ isLoading: true })
+
+        const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        })
+
+        if (authError || !authData.user) {
+          set({ isLoading: false })
+          return { success: false, error: authError?.message || 'Login failed' }
+        }
+
+        // Fetch app_user profile
+        const { data: appUser, error: profileError } = await supabase
+          .from('app_user')
+          .select('*')
+          .eq('id', authData.user.id)
+          .single()
+
+        if (profileError || !appUser) {
+          set({ isLoading: false })
+          return { success: false, error: 'Could not load your profile. Please contact support.' }
+        }
+
+        set({ user: appUser, isAuthenticated: true, isLoading: false })
         return { success: true }
       },
 
-      logout: () => {
+      logout: async () => {
+        const supabase = createClient()
+        await supabase.auth.signOut()
         set({ user: null, isAuthenticated: false })
       },
 
@@ -127,9 +148,10 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: 'param-auth',
+      // Only persist the user object — re-validate session on load via initAuth
+      partialize: (state) => ({ user: state.user, isAuthenticated: state.isAuthenticated }),
     }
   )
 )
 
 export type { Feature, Role }
-export { MOCK_USERS }

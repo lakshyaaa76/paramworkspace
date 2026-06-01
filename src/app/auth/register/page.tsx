@@ -3,11 +3,12 @@
 import Link from 'next/link'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Mail, Lock, User, ShieldCheck } from 'lucide-react'
+import { Mail, Lock, User } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Separator } from '@/components/ui/separator'
 import { createClient } from '@/lib/supabase/client'
 import { toast } from 'sonner'
@@ -18,8 +19,8 @@ export default function RegisterPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirm, setConfirm] = useState('')
-  const [role, setRole] = useState<'maker' | 'mentor' | 'admin'>('maker')
-  
+  const [role, setRole] = useState('viewer')
+
   const router = useRouter()
   const supabase = createClient()
 
@@ -63,11 +64,11 @@ export default function RegisterPage() {
         })
 
         if (dbError) {
-          console.error('Error creating app_user:', dbError)
-          toast.error('Account created, but failed to set profile. Please contact support.')
+          console.error('Error creating app_user:', dbError.message, '| Code:', dbError.code, '| Details:', dbError.details)
+          toast.error(`Profile setup failed: ${dbError.message || 'Unknown error'}. Check console for details.`)
         } else {
-          toast.success('Account created successfully!')
-          router.push('/dashboard')
+          toast.success('Account created! Welcome to Param Makerspace 🎉')
+          router.push('/onboarding')
           router.refresh()
         }
       }
@@ -117,24 +118,6 @@ export default function RegisterPage() {
               </div>
             </div>
             
-            {/* Role Selection (Development Only) */}
-            <div className="space-y-2">
-              <Label htmlFor="role">Assign Role (Dev Mode)</Label>
-              <div className="relative">
-                <ShieldCheck className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <select 
-                  id="role"
-                  className="w-full h-10 rounded-md border border-input bg-background px-9 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                  value={role}
-                  onChange={(e) => setRole(e.target.value as any)}
-                >
-                  <option value="maker">Maker</option>
-                  <option value="mentor">Mentor</option>
-                  <option value="admin">Admin</option>
-                </select>
-              </div>
-            </div>
-
             <div className="space-y-2">
               <Label htmlFor="password">Password</Label>
               <div className="relative">
@@ -151,6 +134,7 @@ export default function RegisterPage() {
                 />
               </div>
             </div>
+
             <div className="space-y-2">
               <Label htmlFor="confirm">Confirm Password</Label>
               <div className="relative">
@@ -166,6 +150,22 @@ export default function RegisterPage() {
                 />
               </div>
             </div>
+
+            <div className="space-y-2">
+              <Label>Role</Label>
+              <Select value={role} onValueChange={setRole}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a role" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="viewer">Viewer (Default)</SelectItem>
+                  <SelectItem value="maker">Maker</SelectItem>
+                  <SelectItem value="mentor">Mentor</SelectItem>
+                  <SelectItem value="admin">Admin</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
             <Button type="submit" className="w-full bg-gradient-to-r from-brand-deep to-brand-ocean text-white hover:opacity-90 transition-opacity" disabled={loading}>
               {loading ? 'Creating account...' : 'Create Account'}
             </Button>
